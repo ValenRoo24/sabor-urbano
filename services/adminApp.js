@@ -4,6 +4,7 @@ import { CategoryService } from './categoryService.js';
 
 let currentUserEmail = '';
 let currentLocalId = null; 
+let currentSlug = null;
 let scheduleState = {};
 
 const DIAS_CLAVE = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
@@ -26,13 +27,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             .single();
 
         if (adminErr || !adminData || adminData.rol !== 'admin') {
-            await showAppAlert('Acceso denegado', 'Tu usuario no tiene permisos de administrador.', 'error');
+            await showAppAlert('Acceso denegado', 'Tu usuario no cuenta con permisos de administrador para ingresar a esta sección.', 'error');
             window.location.href = 'login.html';
             return;
         }
 
         if (!adminData.local_id) {
-            await showAppAlert('Sin Local', 'Tu cuenta no está vinculada a ningún local.', 'warning');
+            await showAppAlert('Comercio no asignado', 'Tu cuenta no está vinculada a ningún local. Contactá a soporte.', 'warning');
             return;
         }
 
@@ -44,15 +45,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         setupAdminEventListeners();
     } catch (err) {
         console.error('Error al inicializar panel:', err);
+        showAppAlert('Fallo de conexión', 'No pudimos cargar los datos de tu comercio. Por favor recargá la página.', 'error');
     }
 });
 
 function setupAdminEventListeners() {
-    document.querySelectorAll('.btn-toggle-config').forEach(btn => btn.addEventListener('click', toggleConfigModal));
+    // Abrir y cerrar modal de configuración
+    document.getElementById('btn-open-config')?.addEventListener('click', toggleConfigModal);
+    document.getElementById('btn-close-config')?.addEventListener('click', toggleConfigModal);
+    document.getElementById('btn-cancel-config')?.addEventListener('click', toggleConfigModal);
+
+    // Botón Ver Menú con validación de Slug
+    document.getElementById('btn-ver-menu')?.addEventListener('click', (e) => {
+        if (!currentSlug) {
+            e.preventDefault();
+            showAppAlert(
+                'Falta configurar la URL',
+                'Antes de ver el menú público, ingresá a "Configurar Local" y elegí un Nombre para la URL (Slug).',
+                'warning'
+            );
+        }
+    });
+
+    // Cerrar sesión
     document.getElementById('btn-logout')?.addEventListener('click', async () => {
         await AuthService.logout();
         window.location.href = 'login.html';
     });
+
+    // Formularios y acciones
     document.getElementById('form-config')?.addEventListener('submit', handleSaveConfig);
     document.getElementById('form-add-product')?.addEventListener('submit', handleAddProduct);
     document.getElementById('form-add-category')?.addEventListener('submit', handleAddCategory);
@@ -99,27 +120,51 @@ async function loadCategories() {
                 btn.addEventListener('click', async (e) => await deleteCategory(e.currentTarget.getAttribute('data-id')));
             });
         } else {
-            if (list) list.innerHTML = '<span class="text-xs text-slate-400">No hay categorías creadas.</span>';
+            if (list) list.innerHTML = '<span class="text-xs text-slate-400">No hay categorías creadas aún.</span>';
         }
         lucide.createIcons();
-    } catch (error) { console.error("Error cargando categorías:", error); }
+    } catch (error) {
+        console.error("Error cargando categorías:", error);
+    }
 }
 
 async function handleAddCategory(e) {
     e.preventDefault();
     const nombreInput = document.getElementById('cat-name');
+    const nombre = nombreInput.value.trim();
+    
+    if (!nombre) return;
+
     try {
-        await CategoryService.create(nombreInput.value.trim(), currentLocalId);
+        await CategoryService.create(nombre, currentLocalId);
         nombreInput.value = '';
         await loadCategories();
-    } catch (error) { showAppAlert('Error', 'No se pudo crear: ' + error.message, 'error'); }
+        showAppAlert('Categoría creada', `Se agregó "${nombre}" correctamente.`, 'success');
+    } catch (error) { 
+        showAppAlert('No se pudo crear', 'Ocurrió un inconveniente al guardar la categoría. Intentalo de nuevo.', 'error'); 
+    }
 }
 
 async function deleteCategory(id) {
-    const res = await Swal.fire({ title: '¿Eliminar?', text: "Productos con esta categoría seguirán existiendo.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#e11d48', cancelButtonColor: '#64748b', confirmButtonText: 'Sí', cancelButtonText: 'No' });
+    const res = await Swal.fire({ 
+        title: '¿Eliminar categoría?', 
+        text: "Los productos asociados mantendrán su información pero la sección se quitará del menú.", 
+        icon: 'warning', 
+        showCancelButton: true, 
+        confirmButtonColor: '#e11d48', 
+        cancelButtonColor: '#64748b', 
+        confirmButtonText: 'Sí, eliminar', 
+        cancelButtonText: 'Cancelar' 
+    });
+
     if (res.isConfirmed) {
-        try { await CategoryService.delete(id); await loadCategories(); } 
-        catch (error) { showAppAlert('Error', error.message, 'error'); }
+        try { 
+            await CategoryService.delete(id); 
+            await loadCategories();
+            showAppAlert('Categoría eliminada', 'La categoría fue removida con éxito.', 'success');
+        } catch (error) { 
+            showAppAlert('Error al eliminar', 'No fue posible eliminar la categoría seleccionada.', 'error'); 
+        }
     }
 }
 
@@ -129,7 +174,7 @@ async function loadAdminProducts() {
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    if (products) {
+    if (products && products.length > 0) {
         products.forEach(p => {
             const tr = document.createElement('tr');
             tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition';
@@ -139,6 +184,8 @@ async function loadAdminProducts() {
 
         tbody.querySelectorAll('.btn-toggle-stock').forEach(btn => btn.addEventListener('click', async (e) => await toggleStock(parseInt(e.currentTarget.getAttribute('data-id')), e.currentTarget.getAttribute('data-status') === 'true')));
         tbody.querySelectorAll('.btn-delete-product').forEach(btn => btn.addEventListener('click', async (e) => await deleteProduct(parseInt(e.currentTarget.getAttribute('data-id')))));
+    } else {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">No tenés productos cargados en la carta.</td></tr>';
     }
     lucide.createIcons();
 }
@@ -147,10 +194,10 @@ async function handleAddProduct(e) {
     e.preventDefault();
     const btnSubmit = document.getElementById('btn-submit-product');
     const originalText = btnSubmit.innerText;
-    const nombre = document.getElementById('p-name').value;
+    const nombre = document.getElementById('p-name').value.trim();
     const precio = parseInt(document.getElementById('p-price').value);
     const categoria = document.getElementById('p-cat').value;
-    const descripcion = document.getElementById('p-desc').value;
+    const descripcion = document.getElementById('p-desc').value.trim();
     const file = document.getElementById('p-img-file').files[0];
     let imagen_url = 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500&q=80';
 
@@ -159,33 +206,60 @@ async function handleAddProduct(e) {
 
     try {
         if (file) {
-            btnSubmit.innerText = 'Subiendo...';
+            btnSubmit.innerText = 'Subiendo imagen...';
             const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${file.name.split('.').pop()}`;
             const { error: uploadError } = await supabase.storage.from('productos').upload(fileName, file);
-            if (uploadError) throw uploadError;
+            if (uploadError) throw new Error('UPLOAD_FAILED');
             imagen_url = supabase.storage.from('productos').getPublicUrl(fileName).data.publicUrl;
         }
+
         btnSubmit.innerText = 'Registrando...';
         const { error } = await supabase.from('productos').insert([{ nombre, precio, categoria, descripcion, imagen_url, disponible: true, local_id: currentLocalId }]);
         if (error) throw error;
+
         e.target.reset();
         await loadAdminProducts();
-        showAppAlert('Producto Creado', `Agregado al menú.`, 'success');
-    } catch (err) { showAppAlert('Error', err.message, 'error'); } 
-    finally { btnSubmit.innerText = originalText; btnSubmit.disabled = false; }
+        showAppAlert('Producto guardado', `"${nombre}" ya se encuentra visible en la carta.`, 'success');
+    } catch (err) {
+        if (err.message === 'UPLOAD_FAILED') {
+            showAppAlert('Error al subir imagen', 'No se pudo cargar la foto. Verificá que sea un archivo de imagen válido y vuelve a intentarlo.', 'error');
+        } else {
+            showAppAlert('No se pudo guardar', 'Ocurrió un error al registrar el producto en la base de datos.', 'error');
+        }
+    } finally { 
+        btnSubmit.innerText = originalText; 
+        btnSubmit.disabled = false; 
+    }
 }
 
 async function toggleStock(id, currentStatus) {
-    await supabase.from('productos').update({ disponible: !currentStatus }).eq('id', id);
-    await loadAdminProducts();
+    const { error } = await supabase.from('productos').update({ disponible: !currentStatus }).eq('id', id);
+    if (error) {
+        showAppAlert('Error', 'No se pudo cambiar el estado del producto.', 'error');
+    } else {
+        await loadAdminProducts();
+    }
 }
 
 async function deleteProduct(id) {
-    const res = await Swal.fire({ title: '¿Eliminar producto?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#e11d48', confirmButtonText: 'Sí', cancelButtonText: 'No' });
+    const res = await Swal.fire({ 
+        title: '¿Eliminar producto?', 
+        text: 'Esta acción no se puede deshacer.', 
+        icon: 'warning', 
+        showCancelButton: true, 
+        confirmButtonColor: '#e11d48', 
+        confirmButtonText: 'Sí, eliminar', 
+        cancelButtonText: 'Cancelar' 
+    });
+
     if (res.isConfirmed) {
-        await supabase.from('productos').delete().eq('id', id);
-        await loadAdminProducts();
-        showAppAlert('Eliminado', 'Producto eliminado.', 'success');
+        const { error } = await supabase.from('productos').delete().eq('id', id);
+        if (error) {
+            showAppAlert('Error', 'No se pudo eliminar el producto.', 'error');
+        } else {
+            await loadAdminProducts();
+            showAppAlert('Producto eliminado', 'El ítem fue quitado del menú.', 'success');
+        }
     }
 }
 
@@ -205,11 +279,13 @@ async function loadConfig() {
         }
 
         if (data.slug) {
+            currentSlug = data.slug;
             const slugEl = document.getElementById('cfg-slug');
             if(slugEl) slugEl.value = data.slug;
             if (btnMenu) btnMenu.href = `index.html?local=${data.slug}`;
         } else {
-            if (btnMenu) btnMenu.href = `index.html`; 
+            currentSlug = null;
+            if (btnMenu) btnMenu.href = `#`; 
         }
 
         if (data.horarios_semana) scheduleState = data.horarios_semana;
@@ -218,7 +294,8 @@ async function loadConfig() {
         if (data.pisos_config && data.pisos_config.length > 0) data.pisos_config.forEach(f => addFloorRow(f.nombre, f.mesas));
         else addFloorRow('Planta Baja', 6);
     } else {
-        if (btnMenu) btnMenu.href = `index.html`; 
+        currentSlug = null;
+        if (btnMenu) btnMenu.href = `#`; 
         initializeDefaultSchedule();
         addFloorRow('Planta Baja', 6);
     }
@@ -239,7 +316,7 @@ async function handleSaveConfig(e) {
         if (nombre && mesas > 0) pisos_config.push({ nombre, mesas });
     });
 
-    if (pisos_config.length === 0) return showAppAlert('Atención', 'Agrega al menos un piso.', 'warning');
+    if (pisos_config.length === 0) return showAppAlert('Faltan sectores', 'Debés agregar al menos un piso o sector para las mesas.', 'warning');
 
     const { error } = await supabase.from('configuracion').upsert({
         local_id: currentLocalId,
@@ -250,9 +327,15 @@ async function handleSaveConfig(e) {
         pisos_config
     }, { onConflict: 'local_id' });
 
-    if (error) showAppAlert('Error', error.message, 'error');
-    else {
-        showAppAlert('¡Guardado!', 'Configuración actualizada.', 'success');
+    if (error) {
+        if (error.code === '23505') {
+            showAppAlert('URL no disponible', `El enlace "${slug}" ya está registrado por otro comercio. Por favor probá con otro nombre.`, 'warning');
+        } else {
+            showAppAlert('Error al guardar', 'No pudimos actualizar la configuración de tu comercio.', 'error');
+        }
+    } else {
+        currentSlug = slug;
+        showAppAlert('Configuración guardada', 'Los ajustes de tu comercio se actualizaron correctamente.', 'success');
         document.getElementById('cfg-slug').value = slug;
         const btnMenu = document.getElementById('btn-ver-menu');
         if (btnMenu && slug) btnMenu.href = `index.html?local=${slug}`;
@@ -359,18 +442,34 @@ async function handleAddUserRole(e) {
     
     if (error) {
         if (error.code === '23505') {
-            showAppAlert('Correo ya registrado', 'Este usuario ya se encuentra registrado en el sistema.', 'warning');
+            showAppAlert('Usuario existente', `El correo "${email}" ya cuenta con accesos registrados en este comercio.`, 'warning');
         } else {
-            showAppAlert('Error', error.message, 'error');
+            showAppAlert('Error al autorizar', 'No se pudo registrar el nuevo usuario. Intentá de nuevo.', 'error');
         }
     } else { 
-        showAppAlert('Éxito', `Acceso otorgado a ${email}`, 'success'); 
+        showAppAlert('Permiso otorgado', `Se le asignaron permisos correctamente a ${email}.`, 'success'); 
         e.target.reset(); 
         await loadUsers(); 
     }
 }
 
 async function removeUser(id, email) {
-    const res = await Swal.fire({ title: '¿Revocar?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#e11d48', confirmButtonText: 'Sí' });
-    if (res.isConfirmed) { await supabase.from('admins').delete().eq('id', id); await loadUsers(); }
+    const res = await Swal.fire({ 
+        title: '¿Revocar permisos?', 
+        text: `El usuario ${email} perderá acceso al sistema de este local.`,
+        icon: 'warning', 
+        showCancelButton: true, 
+        confirmButtonColor: '#e11d48', 
+        confirmButtonText: 'Sí, revocar',
+        cancelButtonText: 'Cancelar'
+    });
+    if (res.isConfirmed) { 
+        const { error } = await supabase.from('admins').delete().eq('id', id);
+        if (error) {
+            showAppAlert('Error', 'No se pudieron quitar los permisos del usuario.', 'error');
+        } else {
+            await loadUsers(); 
+            showAppAlert('Acceso removido', 'El permiso ha sido revocado.', 'success');
+        }
+    }
 }
