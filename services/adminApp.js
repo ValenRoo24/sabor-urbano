@@ -4,6 +4,7 @@ import { CategoryService } from './categoryService.js';
 
 let currentUserEmail = '';
 let currentLocalId = null; 
+let currentConfigId = null;
 let currentSlug = null;
 let scheduleState = {};
 
@@ -271,6 +272,7 @@ async function loadConfig() {
     const btnMenu = document.getElementById('btn-ver-menu');
 
     if (data) {
+        currentConfigId = data.id;
         if (data.alias_mp) document.getElementById('cfg-alias-mp').value = data.alias_mp;
         
         if (data.mp_access_token) {
@@ -294,6 +296,7 @@ async function loadConfig() {
         if (data.pisos_config && data.pisos_config.length > 0) data.pisos_config.forEach(f => addFloorRow(f.nombre, f.mesas));
         else addFloorRow('Planta Baja', 6);
     } else {
+        currentConfigId = null;
         currentSlug = null;
         if (btnMenu) btnMenu.href = `#`; 
         initializeDefaultSchedule();
@@ -302,8 +305,40 @@ async function loadConfig() {
     renderDaysSchedule();
 }
 
+function collectScheduleFromDOM() {
+    const container = document.getElementById('days-schedule-container');
+    if (!container) return;
+    
+    DIAS_CLAVE.forEach((dia) => {
+        const dayCard = container.querySelector(`[data-dia="${dia}"]`)?.closest('.bg-slate-50, .dark\\:bg-slate-900');
+        const chk = container.querySelector(`.chk-day-active[data-dia="${dia}"]`);
+        const isActivo = chk ? chk.checked : false;
+        
+        if (!scheduleState[dia]) scheduleState[dia] = { activo: isActivo, turnos: [] };
+        scheduleState[dia].activo = isActivo;
+        
+        if (isActivo && dayCard) {
+            const shiftRows = dayCard.querySelectorAll('.flex.items-center.gap-2.flex-wrap');
+            const turnos = [];
+            shiftRows.forEach(row => {
+                const timeInputs = row.querySelectorAll('.inline-flex');
+                if (timeInputs.length >= 2) {
+                    const startH = String(Math.min(23, Math.max(0, parseInt(timeInputs[0].querySelector('.time-h')?.value) || 0))).padStart(2, '0');
+                    const startM = String(Math.min(59, Math.max(0, parseInt(timeInputs[0].querySelector('.time-m')?.value) || 0))).padStart(2, '0');
+                    const endH = String(Math.min(23, Math.max(0, parseInt(timeInputs[1].querySelector('.time-h')?.value) || 0))).padStart(2, '0');
+                    const endM = String(Math.min(59, Math.max(0, parseInt(timeInputs[1].querySelector('.time-m')?.value) || 0))).padStart(2, '0');
+                    turnos.push({ inicio: `${startH}:${startM}`, fin: `${endH}:${endM}` });
+                }
+            });
+            scheduleState[dia].turnos = turnos;
+        }
+    });
+}
+
 async function handleSaveConfig(e) {
     e.preventDefault();
+    collectScheduleFromDOM();
+
     const alias_mp = document.getElementById('cfg-alias-mp')?.value.trim() || 'SABORURBANO.MP';
     const mp_access_token = document.getElementById('cfg-mp-token')?.value.trim() || null;
     const rawSlug = document.getElementById('cfg-slug')?.value || '';
@@ -318,20 +353,31 @@ async function handleSaveConfig(e) {
 
     if (pisos_config.length === 0) return showAppAlert('Faltan sectores', 'Debés agregar al menos un piso o sector para las mesas.', 'warning');
 
-    const { error } = await supabase.from('configuracion').upsert({
+    const payload = {
         local_id: currentLocalId,
         alias_mp,
         mp_access_token,
         slug,
         horarios_semana: scheduleState,
         pisos_config
-    }, { onConflict: 'local_id' });
+    };
+
+    let error;
+    if (currentConfigId) {
+        const res = await supabase.from('configuracion').update(payload).eq('id', currentConfigId);
+        error = res.error;
+    } else {
+        const res = await supabase.from('configuracion').insert([payload]).select().single();
+        error = res.error;
+        if (res.data) currentConfigId = res.data.id;
+    }
 
     if (error) {
+        console.error('Error guardando configuración:', error);
         if (error.code === '23505') {
             showAppAlert('URL no disponible', `El enlace "${slug}" ya está registrado por otro comercio. Por favor probá con otro nombre.`, 'warning');
         } else {
-            showAppAlert('Error al guardar', 'No pudimos actualizar la configuración de tu comercio.', 'error');
+            showAppAlert('Error al guardar', `No pudimos actualizar la configuración: ${error.message || 'Error de base de datos.'}`, 'error');
         }
     } else {
         currentSlug = slug;
@@ -349,7 +395,7 @@ function initializeDefaultSchedule() {
 
 function create24hInput(timeValue) {
     let [h, m] = (timeValue || '00:00').split(':');
-    return `<div class="inline-flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 shadow-xs"><input type="number" inputmode="numeric" min="0" max="23" value="${(h || '00').padStart(2, '0')}" class="time-h w-9 text-center font-bold text-xs bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:bg-orange-50"><span class="font-bold text-xs text-slate-400">:</span><input type="number" inputmode="numeric" min="0" max="59" value="${(m || '00').padStart(2, '0')}" class="time-m w-9 text-center font-bold text-xs bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:bg-orange-50"><span class="text-[10px] font-bold text-slate-400 pr-1">hs</span></div>`;
+    return `<div class="inline-flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 shadow-xs"><input type="number" inputmode="numeric" min="0" max="23" value="${(h || '00').padStart(2, '0')}" class="time-h w-9 text-center font-bold text-xs bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:bg-orange-500/20 focus:text-orange-500 dark:focus:text-orange-400 rounded-lg"><span class="font-bold text-xs text-slate-400">:</span><input type="number" inputmode="numeric" min="0" max="59" value="${(m || '00').padStart(2, '0')}" class="time-m w-9 text-center font-bold text-xs bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none focus:bg-orange-500/20 focus:text-orange-500 dark:focus:text-orange-400 rounded-lg"><span class="text-[10px] font-bold text-slate-400 pr-1">hs</span></div>`;
 }
 
 function renderDaysSchedule() {
