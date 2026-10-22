@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SaborUrbano - Pedidos Online</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            500: '#f97316',
+                            600: '#ea580c',
+                            700: '#c2410c',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- SDK Oficial de Mercado Pago -->
+    <script src="https://sdk.mercadopago.com/js/v2"></script>
+    <style>
+        html, body { max-width: 100vw; overflow-x: hidden; }
+        .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); }
+        .dark .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen font-sans antialiased transition-colors duration-300">
+
+    <!-- BANNER DE COMERCIO CERRADO -->
+    <div id="closed-banner" class="hidden bg-rose-600 text-white text-center text-xs font-bold py-2.5 px-4 sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto flex items-center justify-center space-x-2">
+            <i data-lucide="clock-off" class="w-4 h-4 flex-shrink-0"></i>
+            <span id="closed-msg">El local está cerrado en este momento. Estás en modo de solo lectura.</span>
+        </div>
+    </div>
+
+    <!-- MODAL INICIAL DE BIENVENIDA / AVISO DE CIERRE -->
+    <div id="welcome-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-6 shadow-2xl border border-slate-200 dark:border-slate-700 text-center">
+            
+            <div id="modal-icon-container" class="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center text-white mx-auto shadow-lg shadow-orange-500/30">
+                <i data-lucide="utensils" class="w-8 h-8"></i>
+            </div>
+
+            <!-- Cartel dinámico si el comercio está cerrado -->
+            <div id="closed-warning-box" class="hidden bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-500/30 p-4 rounded-2xl text-left space-y-2">
+                <div class="flex items-center space-x-2 text-rose-600 dark:text-rose-400 font-bold text-sm">
+                    <i data-lucide="store" class="w-5 h-5 flex-shrink-0"></i>
+                    <span>¡Atención! El local está cerrado</span>
+                </div>
+                <p id="closed-schedule-info" class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed"></p>
+            </div>
+
+            <div class="space-y-1">
+                <h2 id="welcome-title" class="text-2xl font-black">¡Bienvenido a SaborUrbano!</h2>
+                <p id="welcome-subtitle" class="text-xs text-slate-500 dark:text-slate-400">¿Cómo vas a disfrutar tu pedido hoy?</p>
+            </div>
+
+            <div id="modal-options-container" class="grid grid-cols-1 gap-3 pt-2">
+                <!-- Botón Comer en el Local -->
+                <button class="p-4 rounded-2xl border-2 border-orange-500 bg-orange-50 dark:bg-orange-950/40 hover:bg-orange-100 dark:hover:bg-orange-900/50 transition flex items-center space-x-4 text-left">
+                    <div class="w-12 h-12 rounded-xl bg-orange-500 text-white flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="store" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm text-orange-600 dark:text-orange-400">Comer en el Local</h3>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400">Hacé tu pedido desde tu mesa</p>
+                    </div>
+                </button>
+
+                <!-- Botón Domicilio -->
+                <button class="p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center space-x-4 text-left">
+                    <div class="w-12 h-12 rounded-xl bg-slate-800 dark:bg-slate-700 text-white flex items-center justify-center flex-shrink-0">
+                        <i data-lucide="truck" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm">Pedido a Domicilio / Retiro</h3>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400">Para llevar o recibir en tu casa</p>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Botón exclusivo para modo cerrado -->
+            <div id="closed-actions" class="hidden pt-2">
+                <button class="w-full bg-slate-900 hover:bg-slate-800 dark:bg-orange-500 dark:hover:bg-orange-600 text-white font-bold py-3.5 px-4 rounded-2xl text-xs sm:text-sm transition flex items-center justify-center space-x-2 shadow-lg">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                    <span>Ver Menú de todos modos</span>
+                </button>
+            </div>
+
+            <!-- Seleccionar Piso y Mesa -->
+            <div id="form-mesa-container" class="hidden space-y-3 pt-3 border-t border-slate-200 dark:border-slate-700 text-left">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-500 uppercase block mb-1">Sector / Piso</label>
+                    <select id="input-floor-select" class="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200"></select>
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold text-slate-500 uppercase block mb-1">Número de Mesa</label>
+                    <div class="flex gap-2">
+                        <select id="input-mesa" class="flex-1 p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-bold text-orange-500 focus:outline-none"></select>
+                        <button class="bg-orange-500 hover:bg-orange-600 text-white font-bold px-5 py-3 rounded-xl text-sm transition">
+                            Confirmar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header / Navbar -->
+    <header class="sticky top-0 z-40 w-full glass border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-md flex-shrink-0">
+                    <i data-lucide="utensils" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                </div>
+                <div class="truncate">
+                    <h1 class="font-bold text-base sm:text-xl leading-tight truncate">SaborUrbano</h1>
+                    <p id="mode-badge" class="text-[10px] sm:text-xs text-orange-500 font-bold truncate">Comer en el Local</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <button onclick="document.getElementById('welcome-modal').classList.remove('hidden')" title="Cambiar modo" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-orange-500 hover:text-white transition flex items-center space-x-1 text-xs font-semibold">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span id="current-mode-label" class="hidden md:inline">Mesa</span>
+                </button>
+
+                <a href="login.html" title="Acceso Admin" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-orange-500 hover:text-white transition flex items-center space-x-1 text-xs font-semibold">
+                    <i data-lucide="user-cog" class="w-4 h-4"></i>
+                </a>
+
+                <button id="theme-toggle" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition">
+                    <i data-lucide="moon" class="w-4 h-4 sm:w-5 sm:h-5 hidden dark:block"></i>
+                    <i data-lucide="sun" class="w-4 h-4 sm:w-5 sm:h-5 block dark:hidden"></i>
+                </button>
+
+                <button onclick="document.getElementById('cart-modal').classList.toggle('opacity-0'); document.getElementById('cart-modal').classList.toggle('pointer-events-none'); document.getElementById('cart-panel').classList.toggle('translate-x-full');" class="relative bg-orange-500 hover:bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-xl font-medium shadow-md transition flex items-center space-x-1.5 sm:space-x-2 text-xs sm:text-sm">
+                    <i data-lucide="shopping-bag" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+                    <span id="cart-count" class="bg-white text-orange-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">0</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-8 sm:space-y-12">
+        <section id="menu" class="space-y-4 sm:space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-xl sm:text-2xl font-bold">Nuestro Menú</h2>
+                    <p class="text-slate-500 text-xs sm:text-sm">Seleccioná tus productos preferidos</p>
+                </div>
+                <div class="flex items-center space-x-2 overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
+                    <button data-cat="todos" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-orange-500 text-white shadow-sm flex-shrink-0">Todos</button>
+                    <button data-cat="burgers" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex-shrink-0">Hamburguesas</button>
+                    <button data-cat="pizzas" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex-shrink-0">Pizzas</button>
+                    <button data-cat="bebidas" class="cat-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex-shrink-0">Bebidas</button>
+                </div>
+            </div>
+
+            <div id="products-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"></div>
+        </section>
+    </main>
+
+    <!-- Modal Carrito Sidebar -->
+    <div id="cart-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs opacity-0 pointer-events-none transition-opacity duration-300">
+        <div id="cart-panel" class="fixed right-0 top-0 h-full w-full sm:max-w-md bg-white dark:bg-slate-900 shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col justify-between">
+            <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="shopping-bag" class="w-5 h-5 text-orange-500"></i>
+                    <h3 class="font-bold text-base sm:text-lg">Tu Pedido</h3>
+                </div>
+                <button onclick="document.getElementById('cart-modal').classList.add('opacity-0', 'pointer-events-none'); document.getElementById('cart-panel').classList.add('translate-x-full');" class="p-2 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+
+            <div id="cart-items" class="p-4 flex-1 overflow-y-auto space-y-3"></div>
+
+            <div class="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 space-y-3">
+                <div id="delivery-info-box" class="space-y-2">
+                    <div id="field-table" class="hidden">
+                        <label class="text-[10px] font-bold text-slate-500 uppercase">Ubicación</label>
+                        <input type="text" id="order-table" readonly class="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-xs font-bold text-orange-500">
+                    </div>
+
+                    <div id="field-address" class="space-y-2">
+                        <label class="flex items-center space-x-2 cursor-pointer bg-slate-100 dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <input type="checkbox" id="chk-pickup" class="w-4 h-4 text-orange-500 rounded focus:ring-orange-500">
+                            <span class="text-xs font-bold text-slate-700 dark:text-slate-200">Retirar personalmente en el local</span>
+                        </label>
+
+                        <div id="address-inputs-container" class="space-y-2 pt-1">
+                            <label class="text-[10px] font-bold text-slate-500 uppercase">Dirección de Entrega</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <input type="text" id="order-street" placeholder="Calle y N° *" required class="col-span-2 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs">
+                                <input type="text" id="order-floor" placeholder="Piso / Dpto" class="col-span-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs">
+                            </div>
+                            <input type="text" id="order-notes" placeholder="Indicaciones para el cadete" class="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold text-slate-500 uppercase">Medio de Pago</label>
+                    <select id="payment-method" class="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium">
+                        <option value="Efectivo">Efectivo en mano</option>
+                        <option value="Transferencia / MP">Transferencia a Alias / CVU</option>
+                        <option value="Mercado Pago Checkout">Mercado Pago (Tarjetas, Cuotas, Dinero en Cuenta)</option>
+                    </select>
+                </div>
+
+                <div id="mp-info-box" class="hidden bg-slate-100 dark:bg-slate-800 border border-orange-500/30 p-3 rounded-2xl space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase">Alias Mercado Pago</span>
+                        <button type="button" id="btn-copy-alias" class="text-[10px] bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 font-bold px-2 py-1 rounded-lg">
+                            Copiar Alias
+                        </button>
+                    </div>
+                    <p id="mp-alias-text" class="text-sm font-black text-orange-600 dark:text-orange-400">SABORURBANO.MP</p>
+                    <button type="button" id="btn-open-mp" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition">
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                        <span>Abrir App de Mercado Pago</span>
+                    </button>
+                </div>
+
+                <div class="space-y-1 text-xs pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <div class="flex justify-between font-extrabold text-base text-slate-800 dark:text-white">
+                        <span>Total</span>
+                        <span id="cart-total" class="text-orange-600 dark:text-orange-400">$0</span>
+                    </div>
+                </div>
+
+                <button id="btn-confirm-order" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-lg transition text-xs sm:text-sm flex items-center justify-center space-x-2">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                    <span>Enviar Pedido a Cocina</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./services/app.js"></script>
+</body>
+</html>

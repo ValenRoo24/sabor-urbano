@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración - SaborUrbano</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen font-sans">
+
+    <header class="bg-slate-900 text-white p-4 shadow-md sticky top-0 z-20">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i data-lucide="layout-dashboard" class="w-6 h-6 text-orange-500"></i>
+                <h1 class="font-bold text-lg">Panel del Administrador</h1>
+            </div>
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <a href="index.html" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg font-bold text-slate-200 transition flex items-center space-x-1">
+                    <i data-lucide="utensils" class="w-4 h-4 text-orange-400"></i>
+                    <span class="hidden sm:inline">Ver Menú</span>
+                </a>
+                <button id="btn-open-config" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg font-bold text-orange-400 transition flex items-center space-x-1">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
+                    <span>Configurar Local</span>
+                </button>
+                <a href="empleados.html" class="text-xs bg-orange-600 hover:bg-orange-700 px-3 py-2 rounded-lg font-bold text-white transition flex items-center space-x-1">
+                    <i data-lucide="chef-hat" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Comandera</span>
+                </a>
+                <button id="btn-logout" class="text-xs bg-rose-600 hover:bg-rose-700 text-white px-3 py-2 rounded-lg font-bold transition flex items-center space-x-1">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span>Salir</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="config-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 max-w-xl w-full space-y-5 shadow-2xl my-8">
+            <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="sliders" class="w-5 h-5 text-orange-500"></i>
+                    <h3 class="font-bold text-base">Configuración del Local</h3>
+                </div>
+                <button id="btn-close-config" class="text-slate-400 hover:text-slate-600 dark:hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <form id="form-config" class="space-y-6">
+                <div class="space-y-2 border-b border-slate-200 dark:border-slate-700 pb-4">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                        <i data-lucide="link" class="w-4 h-4 text-orange-500"></i>
+                        <span>Enlace Público del Menú</span>
+                    </h4>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Nombre para la URL (Slug)</label>
+                        <input type="text" id="cfg-slug" placeholder="ej: mi-pizzeria (sin espacios)" class="w-full mt-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-bold text-xs lowercase">
+                    </div>
+                </div>
+
+                <div class="space-y-2 border-b border-slate-200 dark:border-slate-700 pb-4">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                        <i data-lucide="wallet" class="w-4 h-4 text-orange-500"></i>
+                        <span>Datos de Mercado Pago / Transferencia</span>
+                    </h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase">Alias / CVU (Transferencia)</label>
+                            <input type="text" id="cfg-alias-mp" placeholder="Ej: SABORURBANO.MP" class="w-full mt-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-bold text-xs">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase">Access Token (Prod)</label>
+                            <input type="password" id="cfg-mp-token" placeholder="APP_USR-..." class="w-full mt-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-bold text-xs">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3 border-b border-slate-200 dark:border-slate-700 pb-5">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                        <i data-lucide="calendar" class="w-4 h-4 text-orange-500"></i>
+                        <span>Días y Turnos de Atención (00:00 a 23:59 hs)</span>
+                    </h4>
+                    <p class="text-[11px] text-slate-400">Ingresá los números directamente (ej: 08 a 12 hs / 19 a 23 hs).</p>
+                    <div id="days-schedule-container" class="space-y-3 max-h-64 overflow-y-auto pr-1"></div>
+                </div>
+
+                <div class="space-y-2">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                        <i data-lucide="layers" class="w-4 h-4 text-orange-500"></i>
+                        <span>Pisos y Sectores del Local</span>
+                    </h4>
+                    <div id="floors-container" class="space-y-2.5 max-h-40 overflow-y-auto pr-1"></div>
+                    <button type="button" id="btn-add-floor" class="w-full py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center space-x-1 transition">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span>+ Agregar Sector / Piso</span>
+                    </button>
+                </div>
+
+                <div class="pt-2 flex gap-2 border-t border-slate-200 dark:border-slate-700">
+                    <button type="button" id="btn-cancel-config" class="w-1/2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold py-2.5 rounded-xl text-xs transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="w-1/2 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-md">
+                        Guardar Cambios
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <main class="max-w-6xl mx-auto p-4 sm:p-6 space-y-8">
+
+        <!-- GESTIÓN DE CATEGORÍAS -->
+        <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+            <h2 class="font-bold text-base flex items-center space-x-2">
+                <i data-lucide="tags" class="w-5 h-5 text-orange-500"></i>
+                <span>Gestión de Categorías</span>
+            </h2>
+            <p class="text-xs text-slate-500">Creá las secciones de tu menú (Ej: Vinos, Postres, Entradas).</p>
+            <form id="form-add-category" class="flex flex-col sm:flex-row gap-2">
+                <input type="text" id="cat-name" required placeholder="Nombre de la categoría..." class="flex-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs sm:text-sm">
+                <button type="submit" class="bg-slate-900 hover:bg-slate-800 dark:bg-orange-500 dark:hover:bg-orange-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs sm:text-sm transition">
+                    Crear Categoría
+                </button>
+            </form>
+            <div id="categories-list" class="flex flex-wrap gap-2 pt-2"></div>
+        </div>
+
+        <!-- GESTIÓN DE PRODUCTOS -->
+        <div class="space-y-6">
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+                <h2 class="font-bold text-base flex items-center space-x-2">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-orange-500"></i>
+                    <span>Agregar Nuevo Producto</span>
+                </h2>
+                <form id="form-add-product" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs sm:text-sm">
+                    <div>
+                        <label class="font-semibold text-slate-500">Nombre</label>
+                        <input type="text" id="p-name" required placeholder="Ej: Burger Doble" class="w-full mt-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                    </div>
+                    <div>
+                        <label class="font-semibold text-slate-500">Precio ($)</label>
+                        <input type="number" id="p-price" required placeholder="8500" class="w-full mt-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                    </div>
+                    <div>
+                        <label class="font-semibold text-slate-500">Categoría</label>
+                        <select id="p-cat" required class="w-full mt-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"></select>
+                    </div>
+                    
+                    <div class="sm:col-span-2">
+                        <label class="font-semibold text-slate-500">Descripción</label>
+                        <textarea id="p-desc" rows="2" placeholder="Ingredientes y detalles completos..." class="w-full mt-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs sm:text-sm resize-y"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="font-semibold text-slate-500">Foto del Producto</label>
+                        <input type="file" id="p-img-file" accept="image/png, image/jpeg, image/webp" class="w-full mt-1 p-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-orange-100 file:text-orange-600 hover:file:bg-orange-200 cursor-pointer transition">
+                        <p class="text-[10px] text-slate-400 mt-1">Dejar vacío para imagen genérica.</p>
+                    </div>
+
+                    <button type="submit" id="btn-submit-product" class="sm:col-span-2 md:col-span-3 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl shadow transition">
+                        Guardar Producto en el Menú
+                    </button>
+                </form>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+                <h2 class="font-bold text-base flex items-center space-x-2">
+                    <i data-lucide="utensils" class="w-5 h-5 text-orange-500"></i>
+                    <span>Productos en Carta</span>
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-400 font-bold">
+                                <th class="p-2">Producto</th>
+                                <th class="p-2">Categoría</th>
+                                <th class="p-2">Precio</th>
+                                <th class="p-2">Estado Stock</th>
+                                <th class="p-2 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-table-body" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- GESTIÓN DE PERSONAL -->
+        <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-4">
+            <h2 class="font-bold text-base flex items-center space-x-2">
+                <i data-lucide="users" class="w-5 h-5 text-orange-500"></i>
+                <span>Gestión de Personal y Permisos</span>
+            </h2>
+            <p class="text-xs text-slate-500">Autorizá correos para acceder como Administradores (Dueños/Socios) o Empleados (Mozos/Cocina).</p>
+
+            <form id="form-add-user" class="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-xl">
+                <input type="email" id="user-email" required placeholder="correo@ejemplo.com" class="sm:col-span-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs sm:text-sm">
+                <select id="user-role" class="p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs sm:text-sm font-semibold">
+                    <option value="empleado">Empleado (Mozos/Cocina)</option>
+                    <option value="admin">Administrador (Dueño)</option>
+                </select>
+                <button type="submit" class="bg-slate-900 hover:bg-slate-800 dark:bg-orange-500 dark:hover:bg-orange-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition flex items-center justify-center space-x-1 whitespace-nowrap">
+                    <i data-lucide="user-plus" class="w-4 h-4"></i>
+                    <span>Autorizar Acceso</span>
+                </button>
+            </form>
+
+            <div class="overflow-x-auto pt-2">
+                <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200 dark:border-slate-700 text-slate-400 font-bold">
+                            <th class="p-2">Correo Autorizado</th>
+                            <th class="p-2">Rol Asignado</th>
+                            <th class="p-2 text-right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="partners-table-body" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="./services/adminApp.js"></script>
+</body>
+</html>

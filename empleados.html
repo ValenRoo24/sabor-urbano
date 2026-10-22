@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comandera / Cocina - SaborUrbano</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-20 shadow-md">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i data-lucide="chef-hat" class="w-6 h-6 text-orange-500"></i>
+                <h1 class="font-bold text-base sm:text-lg">Comandera Digital</h1>
+            </div>
+            
+            <div class="flex items-center space-x-2">
+                <button id="btn-clear-completed" onclick="clearCompletedOrders()" class="text-xs bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/50 px-3 py-2 rounded-xl font-bold transition flex items-center space-x-1">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Limpiar Finalizados</span>
+                </button>
+                <a href="admin.html" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-xl font-bold text-slate-200 transition flex items-center space-x-1">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 text-orange-400"></i>
+                    <span class="hidden sm:inline">Panel Admin</span>
+                </a>
+                <button id="btn-logout-employee" onclick="handleLogout()" class="text-xs bg-slate-700 hover:bg-slate-600 text-rose-400 px-3 py-2 rounded-xl font-bold transition flex items-center space-x-1">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span>Salir</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+
+        <!-- Columnas de Estados -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Pendientes -->
+            <div class="space-y-4">
+                <div class="bg-amber-950/40 border border-amber-800/40 p-3 rounded-2xl flex justify-between items-center">
+                    <h2 class="font-bold text-amber-400 text-sm flex items-center gap-2">
+                        <i data-lucide="clock" class="w-4 h-4"></i>
+                        <span>PENDIENTES</span>
+                    </h2>
+                    <span id="count-pendiente" class="bg-amber-500/20 text-amber-300 text-xs font-black px-2.5 py-1 rounded-full">0</span>
+                </div>
+                <div id="col-pendiente" class="space-y-3"></div>
+            </div>
+
+            <!-- En Preparación -->
+            <div class="space-y-4">
+                <div class="bg-blue-950/40 border border-blue-800/40 p-3 rounded-2xl flex justify-between items-center">
+                    <h2 class="font-bold text-blue-400 text-sm flex items-center gap-2">
+                        <i data-lucide="flame" class="w-4 h-4"></i>
+                        <span>EN PREPARACIÓN</span>
+                    </h2>
+                    <span id="count-preparacion" class="bg-blue-500/20 text-blue-300 text-xs font-black px-2.5 py-1 rounded-full">0</span>
+                </div>
+                <div id="col-preparacion" class="space-y-3"></div>
+            </div>
+
+            <!-- Finalizados -->
+            <div class="space-y-4">
+                <div class="bg-emerald-950/40 border border-emerald-800/40 p-3 rounded-2xl flex justify-between items-center">
+                    <h2 class="font-bold text-emerald-400 text-sm flex items-center gap-2">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i>
+                        <span>LISTOS / FINALIZADOS</span>
+                    </h2>
+                    <span id="count-finalizado" class="bg-emerald-500/20 text-emerald-300 text-xs font-black px-2.5 py-1 rounded-full">0</span>
+                </div>
+                <div id="col-finalizado" class="space-y-3"></div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        const SUPABASE_URL = 'https://oyeyjkremybtncegobnq.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95ZXlqa3JlbXlidG5jZWdvYm5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwOTAxOTUsImV4cCI6MjEwNzY2NjE5NX0.OHl0bNW9VMLGn1CI5V6b4uLW4tQD-Obc9yJqmpAqzro';
+        const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+
+            const { data: { session } } = await _supabase.auth.getSession();
+            if (!session) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const { data: userCheck } = await _supabase
+                .from('admins')
+                .select('*')
+                .eq('email', session.user.email)
+                .maybeSingle();
+
+            if (!userCheck) {
+                Swal.fire({
+                    title: 'Sin Permisos',
+                    text: 'Tu usuario no tiene acceso a la comandera.',
+                    icon: 'error',
+                    confirmButtonColor: '#f97316',
+                    background: '#1e293b',
+                    color: '#f8fafc'
+                }).then(() => {
+                    window.location.href = 'login.html';
+                });
+                return;
+            }
+
+            await loadOrders();
+
+            // Realtime listener
+            _supabase.channel('public:pedidos')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
+                    loadOrders();
+                })
+                .subscribe();
+        });
+
+        async function loadOrders() {
+            const { data: pedidos, error } = await _supabase.from('pedidos').select('*').order('created_at', { ascending: true });
+
+            if (error) {
+                console.error('Error cargando pedidos:', error);
+                return;
+            }
+
+            const colPendiente = document.getElementById('col-pendiente');
+            const colPreparacion = document.getElementById('col-preparacion');
+            const colFinalizado = document.getElementById('col-finalizado');
+
+            if (!colPendiente || !colPreparacion || !colFinalizado) return;
+
+            colPendiente.innerHTML = '';
+            colPreparacion.innerHTML = '';
+            colFinalizado.innerHTML = '';
+
+            let cPend = 0, cPrep = 0, cFin = 0;
+
+            if (pedidos) {
+                pedidos.forEach(p => {
+                    const card = createOrderCard(p);
+                    if (p.estado === 'pendiente') { colPendiente.appendChild(card); cPend++; }
+                    else if (p.estado === 'preparacion') { colPreparacion.appendChild(card); cPrep++; }
+                    else if (p.estado === 'finalizado') { colFinalizado.appendChild(card); cFin++; }
+                });
+            }
+
+            document.getElementById('count-pendiente').innerText = cPend;
+            document.getElementById('count-preparacion').innerText = cPrep;
+            document.getElementById('count-finalizado').innerText = cFin;
+
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        }
+
+        function createOrderCard(p) {
+            const card = document.createElement('div');
+            card.className = 'bg-slate-800 border border-slate-700 rounded-2xl p-4 space-y-3 shadow-md';
+
+            const hora = new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            const topRow = document.createElement('div');
+            topRow.className = 'flex justify-between items-start';
+
+            const infoLeft = document.createElement('div');
+            const idTag = document.createElement('div');
+            idTag.className = 'flex items-center gap-1.5';
+
+            const idNum = document.createElement('span');
+            idNum.className = 'font-black text-sm';
+            idNum.textContent = `#${p.id}`;
+
+            const badgeTipo = document.createElement('span');
+            if (p.tipo === 'local') {
+                badgeTipo.className = 'bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full';
+                badgeTipo.textContent = p.mesa || 'Local';
+            } else if (p.tipo === 'retiro') {
+                badgeTipo.className = 'bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full';
+                badgeTipo.textContent = 'Retiro en Local';
+            } else {
+                badgeTipo.className = 'bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full';
+                badgeTipo.textContent = 'Delivery';
+            }
+
+            idTag.appendChild(idNum);
+            idTag.appendChild(badgeTipo);
+            infoLeft.appendChild(idTag);
+
+            if (p.direccion) {
+                const addressEl = document.createElement('p');
+                addressEl.className = 'text-xs text-slate-300 font-medium mt-1';
+                addressEl.textContent = `📍 ${p.direccion}`;
+                infoLeft.appendChild(addressEl);
+            }
+
+            const timeEl = document.createElement('span');
+            timeEl.className = 'text-[11px] font-bold text-slate-400';
+            timeEl.textContent = `${hora} hs`;
+
+            topRow.appendChild(infoLeft);
+            topRow.appendChild(timeEl);
+
+            const detailBox = document.createElement('div');
+            detailBox.className = 'bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/50 text-xs font-mono whitespace-pre-line text-slate-200';
+            detailBox.textContent = p.detalle || '';
+
+            const footerRow = document.createElement('div');
+            footerRow.className = 'flex justify-between items-center text-xs pt-1';
+
+            const paymentInfo = document.createElement('span');
+            paymentInfo.className = 'text-slate-400';
+            paymentInfo.innerHTML = `Pago: <strong class="text-slate-200"></strong>`;
+            paymentInfo.querySelector('strong').textContent = p.medio_pago || 'Efectivo';
+
+            const totalInfo = document.createElement('span');
+            totalInfo.className = 'font-extrabold text-orange-400 text-sm';
+            totalInfo.textContent = `$${(p.total || 0).toLocaleString()}`;
+
+            footerRow.appendChild(paymentInfo);
+            footerRow.appendChild(totalInfo);
+
+            const actionContainer = document.createElement('div');
+            if (p.estado === 'pendiente') {
+                const btn = document.createElement('button');
+                btn.className = 'w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl text-xs transition';
+                btn.textContent = 'Aceptar / En Cocina';
+                btn.onclick = () => updateOrderStatus(p.id, 'preparacion');
+                actionContainer.appendChild(btn);
+            } else if (p.estado === 'preparacion') {
+                const btn = document.createElement('button');
+                btn.className = 'w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs transition';
+                btn.textContent = 'Marcar como Listo';
+                btn.onclick = () => updateOrderStatus(p.id, 'finalizado');
+                actionContainer.appendChild(btn);
+            } else {
+                const txt = document.createElement('span');
+                txt.className = 'block text-center text-xs text-slate-500 font-semibold italic';
+                txt.textContent = 'Comanda completada';
+                actionContainer.appendChild(txt);
+            }
+
+            card.appendChild(topRow);
+            card.appendChild(detailBox);
+            card.appendChild(footerRow);
+            card.appendChild(actionContainer);
+
+            return card;
+        }
+
+        async function updateOrderStatus(id, newStatus) {
+            await _supabase.from('pedidos').update({ estado: newStatus }).eq('id', id);
+            await loadOrders();
+        }
+
+        async function clearCompletedOrders() {
+            const res = await Swal.fire({
+                title: '¿Limpiar comanderas?',
+                text: "Se borrarán de la lista todas las comandas finalizadas.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#e11d48',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Sí, limpiar',
+                cancelButtonText: 'Cancelar',
+                background: '#1e293b',
+                color: '#f8fafc'
+            });
+
+            if (res.isConfirmed) {
+                await _supabase.from('pedidos').delete().eq('estado', 'finalizado');
+                await loadOrders();
+                Swal.fire({
+                    title: 'Comanderas Limpias',
+                    text: 'Se eliminaron las comandas entregadas.',
+                    icon: 'success',
+                    confirmButtonColor: '#f97316',
+                    background: '#1e293b',
+                    color: '#f8fafc'
+                });
+            }
+        }
+
+        async function handleLogout() {
+            await _supabase.auth.signOut();
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.href = 'login.html';
+        }
+    </script>
+</body>
+</html>
