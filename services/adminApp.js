@@ -193,11 +193,12 @@ async function loadConfig() {
     const { data } = await supabase.from('configuracion').select('*').eq('local_id', currentLocalId).maybeSingle();
     const container = document.getElementById('floors-container');
     if (container) container.innerHTML = '';
+    
+    const btnMenu = document.getElementById('btn-ver-menu');
 
     if (data) {
         if (data.alias_mp) document.getElementById('cfg-alias-mp').value = data.alias_mp;
         
-        // Recuperar token y mostrarlo en el input
         if (data.mp_access_token) {
             const tokenEl = document.getElementById('cfg-mp-token');
             if(tokenEl) tokenEl.value = data.mp_access_token;
@@ -206,13 +207,18 @@ async function loadConfig() {
         if (data.slug) {
             const slugEl = document.getElementById('cfg-slug');
             if(slugEl) slugEl.value = data.slug;
+            if (btnMenu) btnMenu.href = `index.html?local=${data.slug}`;
+        } else {
+            if (btnMenu) btnMenu.href = `index.html`; 
         }
+
         if (data.horarios_semana) scheduleState = data.horarios_semana;
         else initializeDefaultSchedule();
 
         if (data.pisos_config && data.pisos_config.length > 0) data.pisos_config.forEach(f => addFloorRow(f.nombre, f.mesas));
         else addFloorRow('Planta Baja', 6);
     } else {
+        if (btnMenu) btnMenu.href = `index.html`; 
         initializeDefaultSchedule();
         addFloorRow('Planta Baja', 6);
     }
@@ -222,10 +228,7 @@ async function loadConfig() {
 async function handleSaveConfig(e) {
     e.preventDefault();
     const alias_mp = document.getElementById('cfg-alias-mp')?.value.trim() || 'SABORURBANO.MP';
-    
-    // Capturar el valor del token
     const mp_access_token = document.getElementById('cfg-mp-token')?.value.trim() || null;
-    
     const rawSlug = document.getElementById('cfg-slug')?.value || '';
     const slug = rawSlug.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || null;
 
@@ -251,6 +254,8 @@ async function handleSaveConfig(e) {
     else {
         showAppAlert('¡Guardado!', 'Configuración actualizada.', 'success');
         document.getElementById('cfg-slug').value = slug;
+        const btnMenu = document.getElementById('btn-ver-menu');
+        if (btnMenu && slug) btnMenu.href = `index.html?local=${slug}`;
         toggleConfigModal();
     }
 }
@@ -351,8 +356,18 @@ async function handleAddUserRole(e) {
     const email = document.getElementById('user-email').value.trim();
     const rol = document.getElementById('user-role').value;
     const { error } = await supabase.from('admins').insert([{ email, rol, local_id: currentLocalId }]);
-    if (error) showAppAlert('Error', error.message, 'error');
-    else { showAppAlert('Éxito', `Acceso otorgado a ${email}`, 'success'); e.target.reset(); await loadUsers(); }
+    
+    if (error) {
+        if (error.code === '23505') {
+            showAppAlert('Correo ya registrado', 'Este usuario ya se encuentra registrado en el sistema.', 'warning');
+        } else {
+            showAppAlert('Error', error.message, 'error');
+        }
+    } else { 
+        showAppAlert('Éxito', `Acceso otorgado a ${email}`, 'success'); 
+        e.target.reset(); 
+        await loadUsers(); 
+    }
 }
 
 async function removeUser(id, email) {
